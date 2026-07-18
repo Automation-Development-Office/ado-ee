@@ -66,12 +66,13 @@ From the repository root:
 
 ```bash
 # 1. Generate the build context and build the image
-#    AUTOMATION_HUB_TOKEN is required for certified/validated collections.
+#    Hub token is passed as a build secret (not a build-arg).
+printf '%s' "$AUTOMATION_HUB_TOKEN" > .automation-hub-token
 ansible-builder build \
   -f execution-environment.yml \
   -t ado-ee:local \
   --container-runtime podman \
-  --build-arg AUTOMATION_HUB_TOKEN="$AUTOMATION_HUB_TOKEN"
+  --extra-build-cli-args="--secret id=automation_hub_token,src=$PWD/.automation-hub-token"
 
 # 2. Confirm the ADO collection is present
 podman run --rm ado-ee:local ansible-galaxy collection list
@@ -93,13 +94,13 @@ ansible-builder build \
   -f execution-environment.yml \
   -t ado-ee:local \
   --container-runtime podman \
-  --build-arg AUTOMATION_HUB_TOKEN="$AUTOMATION_HUB_TOKEN" \
+  --extra-build-cli-args="--secret id=automation_hub_token,src=$PWD/.automation-hub-token" \
   --no-cache
 ```
 
 If the build fails pulling the base image, confirm you are logged into `registry.redhat.io` and that your account can access Ansible Automation Platform images.
 
-If Galaxy install fails for certified/validated collections, confirm `AUTOMATION_HUB_TOKEN` is set to a valid token from [console.redhat.com Automation Hub](https://console.redhat.com/ansible/automation-hub/token).
+If Galaxy install fails for certified/validated collections, confirm `AUTOMATION_HUB_TOKEN` is set and passed via the `automation_hub_token` build secret (see commands above). Create a token at [console.redhat.com Automation Hub](https://console.redhat.com/ansible/automation-hub/token).
 
 ## Customizing the EE
 
@@ -118,10 +119,25 @@ After changes, re-run the local build steps above before opening a PR or cutting
 
 [`.github/workflows/test-ee.yml`](.github/workflows/test-ee.yml) runs on:
 
-- Pull requests and pushes to `main` that change EE definition/dependency files
+- Every pull request
+- Every push to `main`
 - Manual **workflow_dispatch**
 
 It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
+
+#### Required for merge
+
+The `test-build` job is intended as a **required status check** on `main` so PRs cannot merge until it passes.
+
+Apply (or refresh) the GitHub ruleset with:
+
+```bash
+# Requires repo admin + authenticated gh CLI
+gh auth login   # if needed
+./scripts/configure-branch-protection.sh
+```
+
+Or set it in the UI: **Settings → Rules → Rulesets →** require status check `test-build` on `main`.
 
 ### Release publish
 

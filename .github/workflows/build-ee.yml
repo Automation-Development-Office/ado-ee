@@ -111,8 +111,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            AUTOMATION_HUB_TOKEN=${{ secrets.AUTOMATION_HUB_TOKEN }}
+          secrets: |
+            automation_hub_token=${{ secrets.AUTOMATION_HUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64

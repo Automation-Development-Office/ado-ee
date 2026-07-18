@@ -2,24 +2,14 @@ name: Test Execution Environment Build
 
 # Builds and inspects the EE without publishing to GHCR.
 # Publishing only happens from the release workflow (build-ee.yml).
+#
+# Runs on every pull request (and pushes to main) so it can be a required
+# status check. Path filters are intentionally omitted — a required check that
+# is skipped leaves PRs unable to merge.
 on:
   push:
     branches: [main]
-    paths:
-      - "execution-environment.yml"
-      - "requirements.yml"
-      - "requirements.txt"
-      - "bindep.txt"
-      - "files/**"
-      - ".github/workflows/test-ee.yml"
   pull_request:
-    paths:
-      - "execution-environment.yml"
-      - "requirements.yml"
-      - "requirements.txt"
-      - "bindep.txt"
-      - "files/**"
-      - ".github/workflows/test-ee.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +23,7 @@ env:
 
 jobs:
   test-build:
+    name: test-build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -86,8 +77,8 @@ jobs:
           push: false
           load: true
           tags: ${{ env.LOCAL_IMAGE }}
-          build-args: |
-            AUTOMATION_HUB_TOKEN=${{ secrets.AUTOMATION_HUB_TOKEN }}
+          secrets: |
+            automation_hub_token=${{ secrets.AUTOMATION_HUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
