@@ -1,0 +1,6 @@
+# System packages to install via bindep (RPM platforms)
+# Docs: https://docs.opendev.org/opendev/bindep/latest/readme.html
+# Format: <package> [platforms:<platform>] [compile]
+# Example:
+# git [platform:rpm]
+# openssh-clients [platform:rpm]

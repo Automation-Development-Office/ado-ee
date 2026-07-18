@@ -1,0 +1,8 @@
+---
+# Ansible Galaxy collections and roles to install into the EE
+# Docs: https://docs.ansible.com/ansible/latest/galaxy/user_guide.html#install-multiple-collections-with-a-requirements-file
+collections: []
+  # - name: community.general
+  #   version: ">=8.0.0"
+  # - name: ansible.posix
+roles: []
