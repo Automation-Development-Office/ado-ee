@@ -1,0 +1,6 @@
+# System packages to install via bindep (RPM platforms)
+# Docs: https://docs.opendev.org/opendev/bindep/latest/readme.html
+# Format: <package> [platforms:<platform>] [compile]
+#
+# Keep pip available as an RPM so assemble still works after python package upgrades.
+python3-pip [platform:rpm]

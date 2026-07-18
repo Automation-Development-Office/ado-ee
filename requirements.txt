@@ -1,0 +1,5 @@
+# Python packages to install into the EE (PEP 508)
+# Docs: https://pip.pypa.io/en/stable/reference/requirements-file-format/
+# Example:
+# jmespath
+# netaddr

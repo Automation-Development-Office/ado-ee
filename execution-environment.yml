@@ -1,0 +1,82 @@
+---
+# Ansible Builder 3.x execution environment definition
+# Docs: https://docs.ansible.com/projects/builder/en/latest/definition/
+version: 3
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest
+
+dependencies:
+  ansible_core:
+    package_pip: ansible-core
+  ansible_runner:
+    package_pip: ansible-runner
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+  # ee-supported already ships many collections + their deps. Skip re-installing
+  # those transitive Python requirements (they pull compile-only packages that break the build).
+  exclude:
+    python:
+      - systemd-python
+      - ovirt-engine-sdk-python
+      - ovirt-imageio
+    all_from_collections:
+      - amazon.aws
+      - ansible.eda
+      - ansible.netcommon
+      - ansible.network
+      - ansible.platform
+      - ansible.posix
+      - ansible.scm
+      - ansible.security
+      - ansible.snmp
+      - ansible.windows
+      - ansible.yang
+      - arista.eos
+      - cisco.intersight
+      - cisco.ios
+      - cisco.iosxr
+      - cisco.nxos
+      - cloud.common
+      - cloud.terraform
+      - hashicorp.terraform
+      - hashicorp.vault
+      - junipernetworks.junos
+      - kubernetes.core
+      - microsoft.ad
+      - microsoft.iis
+      - ~redhat..+
+      - sap.sap_operations
+      - servicenow.itsm
+      - splunk.es
+      - trendmicro.deepsec
+      - vmware.vmware
+      - vmware.vmware_rest
+
+additional_build_files:
+  - src: files/ansible.cfg
+    dest: configs
+  - src: files/inject-hub-token.sh
+    dest: scripts
+
+additional_build_steps:
+  prepend_galaxy:
+    # Inject Hub token via BuildKit/Podman secret (not ARG/ENV — avoids SecretsUsedInArgOrEnv).
+    # CI: secret-files: automation_hub_token=/path/to/file
+    # Local: --secret id=automation_hub_token,src=.automation-hub-token
+    - COPY _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - COPY _build/scripts/inject-hub-token.sh /tmp/inject-hub-token.sh
+    - >-
+      RUN --mount=type=secret,id=automation_hub_token
+      chmod +x /tmp/inject-hub-token.sh
+      && /tmp/inject-hub-token.sh /etc/ansible/ansible.cfg /run/secrets/automation_hub_token
+  # Ensure pip is an RPM package before assemble upgrades Python packages.
+  prepend_builder:
+    - RUN $PKGMGR install -y python3-pip && $PKGMGR clean all
+
+options:
+  package_manager_path: /usr/bin/microdnf
+  tags:
+    - ado-ee:latest

@@ -1,0 +1,158 @@
+name: Build and Publish Execution Environment
+
+on:
+  release:
+    types: [published]
+  # Optional: allow manual re-runs against an existing release tag
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach assets to (e.g. v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  # GHCR requires lowercase image names
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/automation-development-office/ado-ee
+  # Mapped so we can safely test presence (secrets cannot be used directly in if:)
+  RH_REGISTRY_USERNAME: ${{ secrets.RH_REGISTRY_USERNAME }}
+  RH_REGISTRY_TOKEN: ${{ secrets.RH_REGISTRY_TOKEN }}
+  AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          # Sanitize for filenames (keep version string intact for image tags)
+          SAFE_TAG="${TAG//\//-}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ansible-builder
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-builder
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Require Red Hat registry credentials
+        run: |
+          if [ -z "${RH_REGISTRY_USERNAME}" ] || [ -z "${RH_REGISTRY_TOKEN}" ]; then
+            echo "::error::RH_REGISTRY_USERNAME and RH_REGISTRY_TOKEN secrets are required to pull the AAP base image from registry.redhat.io"
+            echo "Create a registry service account at https://access.redhat.com/terms-based-registry and add both secrets to this repository."
+            exit 1
+          fi
+          if [ -z "${AUTOMATION_HUB_TOKEN}" ]; then
+            echo "::error::AUTOMATION_HUB_TOKEN secret is required to install certified/validated collections from console.redhat.com Automation Hub"
+            echo "Create a token at https://console.redhat.com/ansible/automation-hub/token and add it as AUTOMATION_HUB_TOKEN."
+            exit 1
+          fi
+
+      - name: Log in to Red Hat Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.redhat.io
+          username: ${{ env.RH_REGISTRY_USERNAME }}
+          password: ${{ env.RH_REGISTRY_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create build context
+        run: |
+          # --container-runtime is a build-only flag in ansible-builder 3.x;
+          # use --output-filename Dockerfile for GitHub Actions (Docker/Buildx).
+          ansible-builder create \
+            -f execution-environment.yml \
+            --output-filename Dockerfile
+
+      - name: Prepare Automation Hub token secret file
+        run: |
+          printf '%s' "${AUTOMATION_HUB_TOKEN}" > "${RUNNER_TEMP}/automation_hub_token"
+          chmod 600 "${RUNNER_TEMP}/automation_hub_token"
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Build and push Execution Environment
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./context
+          file: ./context/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          secret-files: |
+            automation_hub_token=${{ runner.temp }}/automation_hub_token
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Export image archive for release
+        id: archive
+        run: |
+          IMAGE_REF="${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+          ARCHIVE="ado-ee-${{ steps.tag.outputs.safe_tag }}.tar.gz"
+          docker pull "${IMAGE_REF}"
+          docker save "${IMAGE_REF}" | gzip > "${ARCHIVE}"
+          ls -lh "${ARCHIVE}"
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+
+      - name: Attach image archive to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.archive.outputs.archive }}" --clobber
+
+      - name: Summary
+        run: |
+          {
+            echo "## Execution Environment published"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Image | \`${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\` |"
+            echo "| Also tagged | \`${{ env.IMAGE_NAME }}:latest\` |"
+            echo "| Release asset | \`${{ steps.archive.outputs.archive }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo ""
+            echo '```bash'
+            echo "podman pull ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+            echo "# or"
+            echo "docker pull ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

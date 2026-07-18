@@ -1,0 +1,36 @@
+---
+# Ansible Galaxy collections and roles to install into the EE
+# Docs: https://docs.ansible.com/ansible/latest/galaxy/user_guide.html#install-multiple-collections-with-a-requirements-file
+#
+# Sources (via files/ansible.cfg galaxy server_list):
+#   - rh_published  → Red Hat Automation Hub certified/published
+#   - rh_validated  → Red Hat Automation Hub validated
+#   - galaxy        → Ansible Galaxy (community)
+collections:
+  # Automation Development Office collection (release artifact)
+  - name: infra.ado
+    type: url
+    source: https://github.com/Automation-Development-Office/ado/releases/download/1.0.0/infra-ado-1.0.0.tar.gz
+
+  # Declared dependency of infra.ado
+  - name: ansible.utils
+
+  # Red Hat certified (published) — upgrades versions already in ee-supported when needed
+  - name: ansible.controller
+    version: 4.6.19
+  - name: ansible.hub
+    version: 1.0.6
+
+  # Community / Galaxy
+  - name: awx.awx
+    version: 24.6.1
+  - name: community.general
+    version: 13.1.0
+
+  # Red Hat validated
+  - name: infra.aap_configuration
+    version: 3.4.1
+  - name: infra.controller_configuration
+    version: 3.1.2
+
+roles: []
