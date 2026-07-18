@@ -22,6 +22,7 @@ env:
   # Mapped so we can safely test presence (secrets cannot be used directly in if:)
   RH_REGISTRY_USERNAME: ${{ secrets.RH_REGISTRY_USERNAME }}
   RH_REGISTRY_TOKEN: ${{ secrets.RH_REGISTRY_TOKEN }}
+  AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
 
 jobs:
   build-publish:
@@ -62,6 +63,11 @@ jobs:
           if [ -z "${RH_REGISTRY_USERNAME}" ] || [ -z "${RH_REGISTRY_TOKEN}" ]; then
             echo "::error::RH_REGISTRY_USERNAME and RH_REGISTRY_TOKEN secrets are required to pull the AAP base image from registry.redhat.io"
             echo "Create a registry service account at https://access.redhat.com/terms-based-registry and add both secrets to this repository."
+            exit 1
+          fi
+          if [ -z "${AUTOMATION_HUB_TOKEN}" ]; then
+            echo "::error::AUTOMATION_HUB_TOKEN secret is required to install certified/validated collections from console.redhat.com Automation Hub"
+            echo "Create a token at https://console.redhat.com/ansible/automation-hub/token and add it as AUTOMATION_HUB_TOKEN."
             exit 1
           fi
 
@@ -105,24 +111,27 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            AUTOMATION_HUB_TOKEN=${{ secrets.AUTOMATION_HUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
       - name: Export image archive for release
+        id: archive
         run: |
           IMAGE_REF="${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
           ARCHIVE="ado-ee-${{ steps.tag.outputs.safe_tag }}.tar.gz"
           docker pull "${IMAGE_REF}"
           docker save "${IMAGE_REF}" | gzip > "${ARCHIVE}"
           ls -lh "${ARCHIVE}"
-          echo "archive=${ARCHIVE}" >> "$GITHUB_ENV"
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
 
       - name: Attach image archive to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ steps.tag.outputs.tag }}" "${{ env.archive }}" --clobber
+          gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.archive.outputs.archive }}" --clobber
 
       - name: Summary
         run: |
@@ -133,7 +142,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Image | \`${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\` |"
             echo "| Also tagged | \`${{ env.IMAGE_NAME }}:latest\` |"
-            echo "| Release asset | \`${{ env.archive }}\` |"
+            echo "| Release asset | \`${{ steps.archive.outputs.archive }}\` |"
             echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
             echo ""
             echo '```bash'

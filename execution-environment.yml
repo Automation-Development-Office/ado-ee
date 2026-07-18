@@ -15,6 +15,45 @@ dependencies:
   galaxy: requirements.yml
   python: requirements.txt
   system: bindep.txt
+  # ee-supported already ships many collections + their deps. Skip re-installing
+  # those transitive Python requirements (they pull compile-only packages that break the build).
+  exclude:
+    python:
+      - systemd-python
+      - ovirt-engine-sdk-python
+      - ovirt-imageio
+    all_from_collections:
+      - amazon.aws
+      - ansible.eda
+      - ansible.netcommon
+      - ansible.network
+      - ansible.platform
+      - ansible.posix
+      - ansible.scm
+      - ansible.security
+      - ansible.snmp
+      - ansible.windows
+      - ansible.yang
+      - arista.eos
+      - cisco.intersight
+      - cisco.ios
+      - cisco.iosxr
+      - cisco.nxos
+      - cloud.common
+      - cloud.terraform
+      - hashicorp.terraform
+      - hashicorp.vault
+      - junipernetworks.junos
+      - kubernetes.core
+      - microsoft.ad
+      - microsoft.iis
+      - ~redhat..+
+      - sap.sap_operations
+      - servicenow.itsm
+      - splunk.es
+      - trendmicro.deepsec
+      - vmware.vmware
+      - vmware.vmware_rest
 
 additional_build_files:
   - src: files/ansible.cfg
@@ -22,7 +61,14 @@ additional_build_files:
 
 additional_build_steps:
   prepend_galaxy:
+    # Token is injected only into the intermediate galaxy stage (not the final image).
+    - ARG AUTOMATION_HUB_TOKEN
     - COPY _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - RUN test -n "$AUTOMATION_HUB_TOKEN" || (echo "AUTOMATION_HUB_TOKEN build-arg is required to install certified/validated collections" >&2; exit 1)
+    - RUN sed -i "s|__AUTOMATION_HUB_TOKEN__|${AUTOMATION_HUB_TOKEN}|g" /etc/ansible/ansible.cfg
+  # Ensure pip is an RPM package before assemble upgrades Python packages.
+  prepend_builder:
+    - RUN $PKGMGR install -y python3-pip && $PKGMGR clean all
 
 options:
   package_manager_path: /usr/bin/microdnf

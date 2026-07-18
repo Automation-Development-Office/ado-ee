@@ -2,3 +2,7 @@
 context/
 context-*/
 execution-environment.smoke.yml
+
+# Local secrets (never commit)
+.automation-hub-token
+.env

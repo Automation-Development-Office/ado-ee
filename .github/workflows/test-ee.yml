@@ -29,6 +29,7 @@ env:
   LOCAL_IMAGE: ado-ee:ci-test
   RH_REGISTRY_USERNAME: ${{ secrets.RH_REGISTRY_USERNAME }}
   RH_REGISTRY_TOKEN: ${{ secrets.RH_REGISTRY_TOKEN }}
+  AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
 
 jobs:
   test-build:
@@ -57,6 +58,11 @@ jobs:
             echo "Create a registry service account at https://access.redhat.com/terms-based-registry and add both secrets to this repository."
             exit 1
           fi
+          if [ -z "${AUTOMATION_HUB_TOKEN}" ]; then
+            echo "::error::AUTOMATION_HUB_TOKEN secret is required to install certified/validated collections from console.redhat.com Automation Hub"
+            echo "Create a token at https://console.redhat.com/ansible/automation-hub/token and add it as AUTOMATION_HUB_TOKEN."
+            exit 1
+          fi
 
       - name: Log in to Red Hat Container Registry
         uses: docker/login-action@v3
@@ -80,6 +86,8 @@ jobs:
           push: false
           load: true
           tags: ${{ env.LOCAL_IMAGE }}
+          build-args: |
+            AUTOMATION_HUB_TOKEN=${{ secrets.AUTOMATION_HUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -107,21 +115,34 @@ jobs:
           docker run --rm "$IMAGE" ansible-runner --version > /tmp/ee-report/ansible-runner-version.txt
           docker run --rm "$IMAGE" ansible-galaxy collection list > /tmp/ee-report/collections.txt
 
-          # Highlight required ADO collection
-          if ! grep -E '^infra\.ado\s+' /tmp/ee-report/collections.txt; then
-            echo "::error::infra.ado collection was not found in the built EE"
+          # Verify required collections and versions
+          fail=0
+          expected_collections=(
+            "infra.ado=1.0.0"
+            "ansible.controller=4.6.19"
+            "ansible.hub=1.0.6"
+            "awx.awx=24.6.1"
+            "community.general=13.1.0"
+            "infra.aap_configuration=3.4.1"
+            "infra.controller_configuration=3.1.2"
+          )
+          for entry in "${expected_collections[@]}"; do
+            name="${entry%%=*}"
+            version="${entry#*=}"
+            name_re="${name//./\\.}"
+            if ! grep -E "^${name_re}[[:space:]]+${version}([[:space:]]|$)" /tmp/ee-report/collections.txt; then
+              echo "::error::Expected collection ${name} ${version} was not found in the built EE"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "Installed collections:"
             cat /tmp/ee-report/collections.txt
             exit 1
           fi
 
           # Base image from definition
-          BASE_IMAGE=$(python3 - <<'PY'
-          import yaml
-          with open("execution-environment.yml") as f:
-              data = yaml.safe_load(f)
-          print(data["images"]["base_image"]["name"])
-          PY
-          )
+          BASE_IMAGE="$(python3 -c 'import yaml; print(yaml.safe_load(open("execution-environment.yml"))["images"]["base_image"]["name"])')"
 
           {
             echo "size_human=${SIZE_HUMAN}"

@@ -66,10 +66,12 @@ From the repository root:
 
 ```bash
 # 1. Generate the build context and build the image
+#    AUTOMATION_HUB_TOKEN is required for certified/validated collections.
 ansible-builder build \
   -f execution-environment.yml \
   -t ado-ee:local \
-  --container-runtime podman
+  --container-runtime podman \
+  --build-arg AUTOMATION_HUB_TOKEN="$AUTOMATION_HUB_TOKEN"
 
 # 2. Confirm the ADO collection is present
 podman run --rm ado-ee:local ansible-galaxy collection list
@@ -78,7 +80,7 @@ podman run --rm ado-ee:local ansible-galaxy collection list
 podman run --rm ado-ee:local ansible --version
 ```
 
-You should see `infra.ado` (and its dependency `ansible.utils`) in the collection list.
+You should see `infra.ado` and the pinned Hub/Galaxy collections (for example `ansible.controller` 4.6.19, `infra.aap_configuration` 3.4.1) in the collection list.
 
 ### Useful local checks
 
@@ -87,10 +89,17 @@ You should see `infra.ado` (and its dependency `ansible.utils`) in the collectio
 ansible-builder create -f execution-environment.yml -v 3
 
 # Rebuild without cache if something looks stale
-ansible-builder build -f execution-environment.yml -t ado-ee:local --container-runtime podman --no-cache
+ansible-builder build \
+  -f execution-environment.yml \
+  -t ado-ee:local \
+  --container-runtime podman \
+  --build-arg AUTOMATION_HUB_TOKEN="$AUTOMATION_HUB_TOKEN" \
+  --no-cache
 ```
 
 If the build fails pulling the base image, confirm you are logged into `registry.redhat.io` and that your account can access Ansible Automation Platform images.
+
+If Galaxy install fails for certified/validated collections, confirm `AUTOMATION_HUB_TOKEN` is set to a valid token from [console.redhat.com Automation Hub](https://console.redhat.com/ansible/automation-hub/token).
 
 ## Customizing the EE
 
@@ -112,7 +121,7 @@ After changes, re-run the local build steps above before opening a PR or cutting
 - Pull requests and pushes to `main` that change EE definition/dependency files
 - Manual **workflow_dispatch**
 
-It builds the EE in GitHub Actions, checks that `infra.ado` is installed, and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
+It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
 
 ### Release publish
 
@@ -130,8 +139,9 @@ It will:
 | --- | --- |
 | `RH_REGISTRY_USERNAME` | Red Hat registry username / service account |
 | `RH_REGISTRY_TOKEN` | Red Hat registry token |
+| `AUTOMATION_HUB_TOKEN` | Offline token for console.redhat.com Automation Hub (certified + validated content) |
 
-Create a registry service account at [access.redhat.com/terms-based-registry](https://access.redhat.com/terms-based-registry) if you do not already have one.
+Create a registry service account at [access.redhat.com/terms-based-registry](https://access.redhat.com/terms-based-registry) if you do not already have one. Create an Automation Hub token at [console.redhat.com/ansible/automation-hub/token](https://console.redhat.com/ansible/automation-hub/token).
 
 Also ensure the repository Actions setting allows **Read and write** permissions so the workflow can publish packages and upload release assets.
 
