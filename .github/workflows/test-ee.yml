@@ -68,6 +68,12 @@ jobs:
             -f execution-environment.yml \
             --output-filename Dockerfile
 
+      - name: Prepare Automation Hub token secret file
+        run: |
+          # File-based secret avoids JWT characters breaking inline secret env parsing.
+          printf '%s' "${AUTOMATION_HUB_TOKEN}" > "${RUNNER_TEMP}/automation_hub_token"
+          chmod 600 "${RUNNER_TEMP}/automation_hub_token"
+
       - name: Build Execution Environment (no push)
         id: build
         uses: docker/build-push-action@v6
@@ -77,8 +83,10 @@ jobs:
           push: false
           load: true
           tags: ${{ env.LOCAL_IMAGE }}
-          secrets: |
-            automation_hub_token=${{ secrets.AUTOMATION_HUB_TOKEN }}
+          secret-files: |
+            automation_hub_token=${{ runner.temp }}/automation_hub_token
+          build-args: |
+            ANSIBLE_GALAXY_CLI_COLLECTION_OPTS=-vvv
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64

@@ -58,20 +58,20 @@ dependencies:
 additional_build_files:
   - src: files/ansible.cfg
     dest: configs
+  - src: files/inject-hub-token.sh
+    dest: scripts
 
 additional_build_steps:
   prepend_galaxy:
     # Inject Hub token via BuildKit/Podman secret (not ARG/ENV — avoids SecretsUsedInArgOrEnv).
-    # CI: secrets: automation_hub_token=${{ secrets.AUTOMATION_HUB_TOKEN }}
+    # CI: secret-files: automation_hub_token=/path/to/file
     # Local: --secret id=automation_hub_token,src=.automation-hub-token
-    # $$ is Dockerfile escaping so the shell sees $ / $(...)
     - COPY _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - COPY _build/scripts/inject-hub-token.sh /tmp/inject-hub-token.sh
     - >-
       RUN --mount=type=secret,id=automation_hub_token
-      TOKEN="$$(cat /run/secrets/automation_hub_token)"
-      && test -n "$$TOKEN"
-      || (echo "Build secret automation_hub_token is required to install certified/validated collections" >&2; exit 1)
-      && sed -i "s|__AUTOMATION_HUB_TOKEN__|$${TOKEN}|g" /etc/ansible/ansible.cfg
+      chmod +x /tmp/inject-hub-token.sh
+      && /tmp/inject-hub-token.sh /etc/ansible/ansible.cfg /run/secrets/automation_hub_token
   # Ensure pip is an RPM package before assemble upgrades Python packages.
   prepend_builder:
     - RUN $PKGMGR install -y python3-pip && $PKGMGR clean all
