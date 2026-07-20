@@ -10,7 +10,7 @@ collections:
   # Automation Development Office collection (release artifact)
   - name: infra.ado
     type: url
-    source: https://github.com/Automation-Development-Office/ado/releases/download/1.0.0/infra-ado-1.0.0.tar.gz
+    source: https://github.com/Automation-Development-Office/ado/releases/download/1.0.1/infra-ado-1.0.1.tar.gz
 
   # Declared dependency of infra.ado
   - name: ansible.utils
