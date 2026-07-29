@@ -3,23 +3,22 @@ name: Build and Publish Execution Environment
 on:
   release:
     types: [published]
-  # Optional: allow manual re-runs against an existing release tag
+  # Optional: rebuild/push an existing tag without consuming Changesets
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build and attach assets to (e.g. v1.0.0)
+        description: Release tag to build and attach assets to (e.g. 1.0.1)
         required: true
         type: string
 
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 env:
-  # GHCR requires lowercase image names
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/automation-development-office/ado-ee
-  # Mapped so we can safely test presence (secrets cannot be used directly in if:)
   RH_REGISTRY_USERNAME: ${{ secrets.RH_REGISTRY_USERNAME }}
   RH_REGISTRY_TOKEN: ${{ secrets.RH_REGISTRY_TOKEN }}
   AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
@@ -28,22 +27,109 @@ jobs:
   build-publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Resolve release tag
         id: tag
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
             TAG="${{ github.event.release.tag_name }}"
+            IS_PRERELEASE="${{ github.event.release.prerelease }}"
           else
             TAG="${{ inputs.tag }}"
+            # workflow_dispatch rebuilds never consume Changesets or move :latest via pre-release path
+            IS_PRERELEASE="false"
           fi
-          # Sanitize for filenames (keep version string intact for image tags)
           SAFE_TAG="${TAG//\//-}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Resolved tag: ${TAG}"
+          VERSION="${TAG#v}"
+          {
+            echo "tag=${TAG}"
+            echo "safe_tag=${SAFE_TAG}"
+            echo "version=${VERSION}"
+            echo "is_prerelease=${IS_PRERELEASE}"
+            echo "is_release_event=$([ "${{ github.event_name }}" = "release" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG} (prerelease=${IS_PRERELEASE})"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        if: github.event_name == 'release'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Preview changesets (pre-release)
+        if: github.event_name == 'release' && github.event.release.prerelease
+        id: changelog_preview
+        uses: ./.github/actions/preview-changesets
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: Apply changesets (official release)
+        if: github.event_name == 'release' && !github.event.release.prerelease
+        id: changelog
+        uses: ./.github/actions/apply-changesets
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: Resolve changelog artifacts
+        if: github.event_name == 'release'
+        id: changelog_artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            {
+              echo "notes_file=${{ steps.changelog_preview.outputs.notes_file }}"
+              echo "version=${{ steps.changelog_preview.outputs.version }}"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "notes_file=${{ steps.changelog.outputs.notes_file }}"
+              echo "changelog_file=${{ steps.changelog.outputs.changelog_file }}"
+              echo "version=${{ steps.changelog.outputs.version }}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set image tags
+        id: image_tags
+        env:
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          IMAGE: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          # Always publish the release's own tag to GHCR.
+          tags="${IMAGE}:${RELEASE_TAG}"
+
+          version="${RELEASE_TAG#v}"
+          is_stable_semver=false
+          if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            is_stable_semver=true
+          fi
+
+          # Only move :latest for a non-prerelease stable X.Y.Z tag.
+          # workflow_dispatch rebuilds of stable tags may refresh :latest.
+          if [ "${IS_PRERELEASE}" != "true" ] && [ "${is_stable_semver}" = "true" ]; then
+            tags="${tags}"$'\n'"${IMAGE}:latest"
+          fi
+
+          {
+            echo "IMAGE_TAGS<<EOF"
+            echo "${tags}"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+          echo "GitHub pre-release: ${IS_PRERELEASE}"
+          echo "Release tag: ${RELEASE_TAG}"
+          echo "Stable semver: ${is_stable_semver}"
+          echo "GHCR tags to publish:"
+          printf '%s\n' "${tags}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -98,15 +184,6 @@ jobs:
           printf '%s' "${AUTOMATION_HUB_TOKEN}" > "${RUNNER_TEMP}/automation_hub_token"
           chmod 600 "${RUNNER_TEMP}/automation_hub_token"
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.tag.outputs.tag }}
-            type=raw,value=latest
-
       - name: Build and push Execution Environment
         id: build
         uses: docker/build-push-action@v6
@@ -114,8 +191,7 @@ jobs:
           context: ./context
           file: ./context/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.IMAGE_TAGS }}
           secret-files: |
             automation_hub_token=${{ runner.temp }}/automation_hub_token
           cache-from: type=gha
@@ -125,18 +201,68 @@ jobs:
       - name: Export image archive for release
         id: archive
         run: |
+          set -euo pipefail
           IMAGE_REF="${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
           ARCHIVE="ado-ee-${{ steps.tag.outputs.safe_tag }}.tar.gz"
           docker pull "${IMAGE_REF}"
           docker save "${IMAGE_REF}" | gzip > "${ARCHIVE}"
           ls -lh "${ARCHIVE}"
-          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "archive=${ARCHIVE}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Attach image archive to GitHub Release
+      - name: Attach image and changelog to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          NOTES_FILE: ${{ steps.changelog_artifacts.outputs.notes_file }}
+          CHANGELOG_FILE: ${{ steps.changelog_artifacts.outputs.changelog_file }}
+          ARCHIVE: ${{ steps.archive.outputs.archive }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$ARCHIVE" --clobber
+          if [ -n "${CHANGELOG_FILE:-}" ] && [ -f "${CHANGELOG_FILE}" ]; then
+            gh release upload "$TAG" "$CHANGELOG_FILE" --clobber
+          fi
+          if [ -n "${NOTES_FILE:-}" ] && [ -f "${NOTES_FILE}" ]; then
+            gh release edit "$TAG" --notes-file "$NOTES_FILE"
+          fi
+
+      - name: Attach image archive (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.archive.outputs.archive }}" --clobber
+          # Best-effort upload if a release exists for this tag
+          if gh release view "${{ steps.tag.outputs.tag }}" >/dev/null 2>&1; then
+            gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.archive.outputs.archive }}" --clobber
+          else
+            echo "No GitHub Release for ${{ steps.tag.outputs.tag }}; skipping asset upload."
+          fi
+
+      - name: Open changelog pull request
+        if: github.event_name == 'release' && !github.event.release.prerelease && steps.changelog.outcome == 'success'
+        id: changelog_pr
+        uses: ./.github/actions/open-changelog-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: ${{ steps.changelog.outputs.version }}
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: Changelog PR summary
+        if: github.event_name == 'release' && !github.event.release.prerelease && steps.changelog_pr.outcome != 'skipped'
+        shell: bash
+        run: |
+          if [ "${{ steps.changelog_pr.outputs.pr_opened }}" = "true" ]; then
+            echo "::notice title=Changelog PR::${{ steps.changelog_pr.outputs.pr_url }}"
+          elif [ "${{ steps.changelog_pr.outcome }}" = "success" ]; then
+            echo "::notice title=Changelog PR::No changelog PR was needed (main already matches the release changelog)."
+          else
+            echo "::error title=Changelog PR::Failed to open changelog PR. Re-run the release workflow or use Actions → Open changelog PR."
+            exit 1
+          fi
 
       - name: Summary
         run: |
@@ -145,14 +271,12 @@ jobs:
             echo ""
             echo "| Item | Value |"
             echo "| --- | --- |"
-            echo "| Image | \`${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\` |"
-            echo "| Also tagged | \`${{ env.IMAGE_NAME }}:latest\` |"
+            echo "| Image tags | see job log **Set image tags** |"
+            echo "| Primary | \`${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\` |"
             echo "| Release asset | \`${{ steps.archive.outputs.archive }}\` |"
             echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
             echo ""
             echo '```bash'
             echo "podman pull ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
-            echo "# or"
-            echo "docker pull ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
