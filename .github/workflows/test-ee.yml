@@ -17,6 +17,8 @@ permissions:
 
 env:
   LOCAL_IMAGE: ado-ee:ci-test
+  RH_REGISTRY_USERNAME: ${{ secrets.RH_REGISTRY_USERNAME }}
+  RH_REGISTRY_TOKEN: ${{ secrets.RH_REGISTRY_TOKEN }}
   AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
 
 jobs:
@@ -40,13 +42,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Require Automation Hub token
+      - name: Require Red Hat registry credentials
         run: |
+          if [ -z "${RH_REGISTRY_USERNAME}" ] || [ -z "${RH_REGISTRY_TOKEN}" ]; then
+            echo "::error::RH_REGISTRY_USERNAME and RH_REGISTRY_TOKEN secrets are required to pull the AAP base image from registry.redhat.io"
+            echo "Create a registry service account at https://access.redhat.com/terms-based-registry and add both secrets to this repository."
+            exit 1
+          fi
           if [ -z "${AUTOMATION_HUB_TOKEN}" ]; then
             echo "::error::AUTOMATION_HUB_TOKEN secret is required to install certified/validated collections from console.redhat.com Automation Hub"
             echo "Create a token at https://console.redhat.com/ansible/automation-hub/token and add it as AUTOMATION_HUB_TOKEN."
             exit 1
           fi
+
+      - name: Log in to Red Hat Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.redhat.io
+          username: ${{ env.RH_REGISTRY_USERNAME }}
+          password: ${{ env.RH_REGISTRY_TOKEN }}
 
       - name: Create build context
         run: |

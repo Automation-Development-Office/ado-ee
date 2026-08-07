@@ -5,8 +5,7 @@ version: 3
 
 images:
   base_image:
-    # Previously published ADO EE (public on GHCR; no registry login required to pull).
-    name: ghcr.io/automation-development-office/ado-ee:latest
+    name: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest
 
 dependencies:
   ansible_core:
@@ -16,7 +15,7 @@ dependencies:
   galaxy: requirements.yml
   python: requirements.txt
   system: bindep.txt
-  # Base image already ships many collections + their deps. Skip re-installing
+  # ee-supported already ships many collections + their deps. Skip re-installing
   # those transitive Python requirements (they pull compile-only packages that break the build).
   exclude:
     python:

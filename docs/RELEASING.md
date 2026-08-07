@@ -12,7 +12,7 @@ The automation lives in [`.github/workflows/build-ee.yml`](../.github/workflows/
 2. User-visible PRs include Changesets under [`.changeset/`](../.changeset/) (see [Adding a changeset](#adding-a-changeset-during-development)).
 3. You know whether this is a **full release** or a **pre-release**.
 4. You know the **exact tag name** you will use. Prefer **unprefixed** semver (`1.2.0`, `1.0.0-alpha`) to match existing GHCR tags. For a full release, that tag must match what Changesets will bump `package.json` to (see [Version alignment](#version-alignment)).
-5. Repository secret `AUTOMATION_HUB_TOKEN` is set (GHCR base/publish uses `GITHUB_TOKEN`).
+5. Repository secrets are set: `RH_REGISTRY_USERNAME`, `RH_REGISTRY_TOKEN`, `AUTOMATION_HUB_TOKEN`.
 
 Current package version is in [`package.json`](../package.json). Pending Changesets determine the next bump (`patch` / `minor` / `major`).
 
@@ -56,7 +56,7 @@ More detail: [`.changeset/README.md`](../.changeset/README.md).
 - Tag must be stable semver: `1.2.0` (optional `v1.2.0`; no `-alpha` / `-rc` suffix).
 - Workflow will:
   - Run `changeset version` (update `CHANGELOG.md`, bump `package.json`, delete consumed `.changeset/*.md` files).
-  - Build the EE (GHCR base + Automation Hub token) and push the image.
+  - Build the EE (RH registry + Automation Hub secrets) and push the image.
   - Tag GHCR with **both** the release tag **and** `:latest`.
   - Attach the image archive and notes / changelog to the GitHub Release.
   - Open a PR to `main` titled like `Changelog for release <version>` — **merge that PR**.
@@ -192,9 +192,9 @@ Use **Actions** → **Open changelog PR** → **Run workflow**, and pass the rel
 
 That should not happen if the release was marked pre-release or the tag had a suffix like `-alpha`. If `latest` was updated incorrectly, publish a correct stable full release (or manually re-tag the previous good image as `latest` in GHCR).
 
-### Missing Hub secret
+### Missing RH / Hub secrets
 
-The publish job fails early if `AUTOMATION_HUB_TOKEN` is unset. Add it under **Settings → Secrets and variables → Actions**.
+The publish job fails early if `RH_REGISTRY_*` or `AUTOMATION_HUB_TOKEN` is unset. Add them under **Settings → Secrets and variables → Actions**.
 
 ---
 
