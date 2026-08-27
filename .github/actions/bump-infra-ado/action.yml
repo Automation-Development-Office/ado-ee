@@ -1,0 +1,201 @@
+---
+name: Bump infra.ado and open PR
+description: Pin infra.ado to a GitHub Release tarball, add a changeset, and open a PR to main
+
+inputs:
+  version:
+    description: Collection version without v prefix (e.g. 1.2.0)
+    required: true
+  reviewers:
+    description: Comma-separated GitHub usernames to request review (optional)
+    required: false
+    default: ""
+  collection_repo:
+    description: GitHub repo that publishes infra-ado-*.tar.gz
+    required: false
+    default: Automation-Development-Office/ado
+
+outputs:
+  pr_url:
+    description: URL of the opened or updated pull request, if any
+    value: ${{ steps.bump.outputs.pr_url }}
+  pr_opened:
+    description: Whether a pull request was opened or already existed
+    value: ${{ steps.bump.outputs.pr_opened }}
+  skipped:
+    description: Whether the bump was skipped because main is already on this version
+    value: ${{ steps.bump.outputs.skipped }}
+
+runs:
+  using: composite
+  steps:
+    - name: Bump pin and open pull request
+      id: bump
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+        REVIEWERS: ${{ inputs.reviewers }}
+        COLLECTION_REPO: ${{ inputs.collection_repo }}
+      run: |
+        set -euo pipefail
+
+        {
+          echo "pr_opened=false"
+          echo "skipped=false"
+        } >> "$GITHUB_OUTPUT"
+
+        VERSION="${VERSION#v}"
+        if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+          echo "::error::Invalid collection version '${VERSION}'. Use semver like 1.2.0 or latest."
+          exit 1
+        fi
+
+        BRANCH="bump/infra-ado-${VERSION}"
+        REMOTE_REF="refs/heads/${BRANCH}"
+        HEAD_REF="${GITHUB_REPOSITORY_OWNER}:${BRANCH}"
+        ASSET="infra-ado-${VERSION}.tar.gz"
+        SOURCE_URL="https://github.com/${COLLECTION_REPO}/releases/download/${VERSION}/${ASSET}"
+
+        echo "Resolved infra.ado version: ${VERSION}"
+        echo "Expected tarball: ${SOURCE_URL}"
+
+        RELEASE_TAG="${VERSION}"
+        if ! gh release view "${RELEASE_TAG}" --repo "${COLLECTION_REPO}" >/dev/null 2>&1; then
+          RELEASE_TAG="v${VERSION}"
+          if ! gh release view "${RELEASE_TAG}" --repo "${COLLECTION_REPO}" >/dev/null 2>&1; then
+            echo "::error::No GitHub Release ${VERSION} or v${VERSION} on ${COLLECTION_REPO}."
+            exit 1
+          fi
+        fi
+
+        if ! gh release view "${RELEASE_TAG}" --repo "${COLLECTION_REPO}" --json assets --jq '.assets[].name' \
+          | grep -Fxq "${ASSET}"; then
+          echo "::error::Release ${RELEASE_TAG} on ${COLLECTION_REPO} does not include ${ASSET}."
+          gh release view "${RELEASE_TAG}" --repo "${COLLECTION_REPO}" --json assets --jq '.assets[].name'
+          exit 1
+        fi
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        git fetch origin main
+        git checkout -B "${BRANCH}" origin/main
+
+        python3 - "${VERSION}" "${SOURCE_URL}" <<'PY'
+        import re
+        import sys
+        from pathlib import Path
+
+        version, source_url = sys.argv[1], sys.argv[2]
+
+        req = Path("requirements.yml")
+        req_text = req.read_text(encoding="utf-8")
+        req_new, req_n = re.subn(
+            r"(source:\s*)https://github\.com/Automation-Development-Office/ado/releases/download/[^/\s]+/infra-ado-[^\s]+\.tar\.gz",
+            r"\1" + source_url,
+            req_text,
+            count=1,
+        )
+        if req_n != 1:
+            raise SystemExit(f"requirements.yml: expected 1 infra.ado URL replacement, got {req_n}")
+        req.write_text(req_new, encoding="utf-8")
+
+        workflow = Path(".github/workflows/test-ee.yml")
+        wf_text = workflow.read_text(encoding="utf-8")
+        wf_new, wf_n = re.subn(
+            r'"infra\.ado=[^"]+"',
+            f'"infra.ado={version}"',
+            wf_text,
+            count=1,
+        )
+        if wf_n != 1:
+            raise SystemExit(f"test-ee.yml: expected 1 infra.ado pin replacement, got {wf_n}")
+        workflow.write_text(wf_new, encoding="utf-8")
+
+        changeset = Path(".changeset/bump-infra-ado.md")
+        changeset.write_text(
+            "\n".join(
+                [
+                    "---",
+                    '"ado-ee": patch',
+                    "---",
+                    "",
+                    f"Bump infra.ado collection to {version}.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        PY
+
+        git add requirements.yml .github/workflows/test-ee.yml .changeset/bump-infra-ado.md
+        if git diff --cached --quiet; then
+          echo "main already pins infra.ado ${VERSION}; nothing to do."
+          echo "skipped=true" >> "$GITHUB_OUTPUT"
+          echo "::notice title=infra.ado pin::main already uses ${VERSION}."
+          exit 0
+        fi
+
+        git commit -m "Update infra.ado collection to version ${VERSION}"
+
+        if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+          echo "Branch ${BRANCH} already exists; updating it."
+          git push origin "HEAD:${REMOTE_REF}" --force
+        else
+          git push origin "HEAD:${REMOTE_REF}"
+        fi
+
+        PR_URL=""
+        for attempt in 1 2 3 4 5; do
+          PR_URL="$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --head "${HEAD_REF}" \
+            --base main \
+            --state open \
+            --json url \
+            --jq '.[0].url' 2>/dev/null || true)"
+          if [ -n "${PR_URL}" ]; then
+            break
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${BRANCH}" >/dev/null 2>&1; then
+            break
+          fi
+          echo "Waiting for branch ${BRANCH} to become visible (attempt ${attempt})..."
+          sleep 2
+        done
+
+        if [ -z "${PR_URL}" ]; then
+          PR_BODY="Bump the EE to [infra.ado ${VERSION}](https://github.com/${COLLECTION_REPO}/releases/tag/${RELEASE_TAG}).
+
+        Opened by **Bump infra.ado collection** (\`github-actions[bot]\`). Merge after \`test-build\` is green.
+
+        - Pin \`requirements.yml\` to \`${ASSET}\`
+        - Expect \`infra.ado=${VERSION}\` in the EE test workflow
+        - Add a patch changeset for the next EE release"
+
+          PR_URL="$(gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --base main \
+            --head "${BRANCH}" \
+            --title "Update infra.ado collection to version ${VERSION}" \
+            --body "${PR_BODY}")"
+          echo "Opened bump PR: ${PR_URL}"
+        else
+          echo "Bump PR already exists: ${PR_URL}"
+        fi
+
+        REVIEWERS="$(echo "${REVIEWERS}" | tr -d ' ')"
+        if [ -n "${REVIEWERS}" ]; then
+          if gh pr edit "${PR_URL}" --add-reviewer "${REVIEWERS}"; then
+            echo "Requested review from ${REVIEWERS}"
+          else
+            echo "::warning::Opened the PR but could not request reviewers (${REVIEWERS})."
+          fi
+        fi
+
+        {
+          echo "pr_url=${PR_URL}"
+          echo "pr_opened=true"
+        } >> "$GITHUB_OUTPUT"
+        echo "::notice title=infra.ado bump PR::${PR_URL}"
