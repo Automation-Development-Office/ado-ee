@@ -84,7 +84,7 @@ podman run --rm ado-ee:local ansible-galaxy collection list
 podman run --rm ado-ee:local ansible --version
 ```
 
-You should see `infra.ado` and the pinned Hub/Galaxy collections (for example `ansible.controller` 4.6.19, `infra.aap_configuration` 3.4.1) in the collection list.
+You should see `infra.ado` 1.2.0 and the pinned Hub/Galaxy collections (for example `ansible.controller` 4.6.19, `infra.aap_configuration` 3.4.1) in the collection list.
 
 ### Useful local checks
 
