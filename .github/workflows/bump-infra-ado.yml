@@ -1,8 +1,8 @@
-name: Bump infra.ado collection
+name: Update Collection Release
 
 # Opens a PR that pins this EE to an infra.ado GitHub Release tarball.
 #
-# Test from this branch: Actions → Bump infra.ado collection → Run workflow
+# Test from this branch: Actions → Update Collection Release → Run workflow
 #   Use version 1.2.0 (or latest). repository_dispatch only works after this
 #   workflow exists on the default branch (main).
 #
@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   bump:
-    name: Open collection bump PR
+    name: Open collection update PR
     runs-on: ubuntu-latest
     steps:
       - name: Resolve collection version
@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
           token: ${{ github.token }}
 
-      - name: Bump infra.ado and open PR
+      - name: Update collection pin and open PR
         id: bump
         uses: ./.github/actions/bump-infra-ado
         with:
@@ -105,8 +105,8 @@ jobs:
             exit 0
           fi
           if [ "${{ steps.bump.outputs.pr_opened }}" = "true" ]; then
-            echo "::notice title=infra.ado bump PR::${{ steps.bump.outputs.pr_url }}"
+            echo "::notice title=Update Collection Release::${{ steps.bump.outputs.pr_url }}"
             exit 0
           fi
-          echo "::error title=infra.ado bump::No PR was opened."
+          echo "::error title=Update Collection Release::No PR was opened."
           exit 1

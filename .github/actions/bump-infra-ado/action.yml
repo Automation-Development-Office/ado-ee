@@ -1,5 +1,5 @@
 ---
-name: Bump infra.ado and open PR
+name: Update Collection Release
 description: Pin infra.ado to a GitHub Release tarball, add a changeset, and open a PR to main
 
 inputs:
@@ -166,9 +166,9 @@ runs:
         done
 
         if [ -z "${PR_URL}" ]; then
-          PR_BODY="Bump the EE to [infra.ado ${VERSION}](https://github.com/${COLLECTION_REPO}/releases/tag/${RELEASE_TAG}).
+          PR_BODY="Update the EE to [infra.ado ${VERSION}](https://github.com/${COLLECTION_REPO}/releases/tag/${RELEASE_TAG}).
 
-        Opened by **Bump infra.ado collection** (\`github-actions[bot]\`). Merge after \`test-build\` is green.
+        Opened by **Update Collection Release** (\`github-actions[bot]\`). Merge after \`test-build\` is green.
 
         - Pin \`requirements.yml\` to \`${ASSET}\`
         - Expect \`infra.ado=${VERSION}\` in the EE test workflow
