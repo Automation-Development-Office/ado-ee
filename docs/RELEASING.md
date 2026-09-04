@@ -178,6 +178,20 @@ Pending `.changeset/` files stay in the repo for the eventual full release.
 
 ---
 
+## Update collection release without cutting an EE release
+
+When a new `infra.ado` GitHub Release exists, you do not have to edit `requirements.yml` by hand.
+
+1. **Actions** → **Update Collection Release** → **Run workflow**.
+2. Choose this branch (until the workflow is on `main`).
+3. Version: `latest` or a tag such as `1.2.0`.
+4. Optional reviewers: comma-separated GitHub usernames. You can also set repo variable `INFRA_ADO_BUMP_REVIEWERS`.
+5. The job opens a PR into `main` (`bump/infra-ado-<version>`) and `test-build` should run on that PR.
+
+`repository_dispatch` (`infra-ado-released`) is the later hook from the collection repo. GitHub only loads that trigger from the **default branch**, so merge this workflow to `main` before wiring the `ado` ping.
+
+---
+
 ## If something goes wrong
 
 ### Apply changesets: tag does not match bump
@@ -203,6 +217,7 @@ The publish job fails early if `RH_REGISTRY_*` or `AUTOMATION_HUB_TOKEN` is unse
 | Path | Role |
 |------|------|
 | [`.github/workflows/build-ee.yml`](../.github/workflows/build-ee.yml) | Release build, GHCR tags, changelog PR |
+| [`.github/workflows/bump-infra-ado.yml`](../.github/workflows/bump-infra-ado.yml) | **Update Collection Release** — open a PR to pin a new infra.ado release |
 | [`.github/workflows/open-changelog-pr.yml`](../.github/workflows/open-changelog-pr.yml) | Manual changelog PR recovery |
 | [`.github/workflows/test-ee.yml`](../.github/workflows/test-ee.yml) | PR/push EE test build (no publish) |
 | [`.changeset/`](../.changeset/) | Pending release notes fragments |

@@ -1,0 +1,112 @@
+name: Update Collection Release
+
+# Opens a PR that pins this EE to an infra.ado GitHub Release tarball.
+#
+# Test from this branch: Actions → Update Collection Release → Run workflow
+#   Use version 1.2.0 (or latest). repository_dispatch only works after this
+#   workflow exists on the default branch (main).
+#
+# Later, the ado collection release job can ping this repo with:
+#   event_type: infra-ado-released
+#   client_payload: { "version": "1.2.0" }
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: infra.ado version (e.g. 1.2.0) or latest
+        required: true
+        type: string
+        default: latest
+      reviewers:
+        description: Comma-separated GitHub usernames to request review (optional)
+        required: false
+        type: string
+  repository_dispatch:
+    types: [infra-ado-released]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: bump-infra-ado-${{ github.event.inputs.version || github.event.client_payload.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Open collection update PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve collection version
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          DISPATCH_REVIEWERS: ${{ github.event.inputs.reviewers }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          PAYLOAD_REVIEWERS: ${{ github.event.client_payload.reviewers }}
+          VAR_REVIEWERS: ${{ vars.INFRA_ADO_BUMP_REVIEWERS }}
+        run: |
+          set -euo pipefail
+          COLLECTION_REPO="Automation-Development-Office/ado"
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${DISPATCH_VERSION}"
+            REVIEWERS="${DISPATCH_REVIEWERS}"
+          else
+            VERSION="${PAYLOAD_VERSION:-${PAYLOAD_TAG}}"
+            REVIEWERS="${PAYLOAD_REVIEWERS}"
+          fi
+
+          VERSION="$(echo "${VERSION}" | tr -d '[:space:]')"
+          VERSION="${VERSION#v}"
+          if [ -z "${VERSION}" ]; then
+            echo "::error::No collection version provided."
+            exit 1
+          fi
+
+          if [ "${VERSION}" = "latest" ]; then
+            VERSION="$(gh api "repos/${COLLECTION_REPO}/releases/latest" --jq .tag_name)"
+            VERSION="${VERSION#v}"
+            echo "Resolved latest stable infra.ado release: ${VERSION}"
+          fi
+
+          if [ -z "${REVIEWERS}" ]; then
+            REVIEWERS="${VAR_REVIEWERS}"
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "reviewers=${REVIEWERS}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Update collection pin and open PR
+        id: bump
+        uses: ./.github/actions/bump-infra-ado
+        with:
+          version: ${{ steps.ver.outputs.version }}
+          reviewers: ${{ steps.ver.outputs.reviewers }}
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.bump.outputs.skipped }}" = "true" ]; then
+            echo "::notice title=infra.ado pin::Already up to date; no PR opened."
+            exit 0
+          fi
+          if [ "${{ steps.bump.outputs.pr_opened }}" = "true" ]; then
+            echo "::notice title=Update Collection Release::${{ steps.bump.outputs.pr_url }}"
+            exit 0
+          fi
+          echo "::error title=Update Collection Release::No PR was opened."
+          exit 1
