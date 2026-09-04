@@ -117,7 +117,7 @@ jobs:
           # Verify required collections and versions
           fail=0
           expected_collections=(
-            "infra.ado=1.1.0"
+            "infra.ado=1.2.0"
             "ansible.controller=4.6.19"
             "ansible.hub=1.0.6"
             "awx.awx=24.6.1"
