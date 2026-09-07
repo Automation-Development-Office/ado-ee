@@ -1,0 +1,9 @@
+{
+  // Composite actions are not workflows; avoid GitHub Actions workflow schema on action.yml.
+  "files.associations": {
+    "**/.github/actions/**/action.yml": "yaml"
+  },
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-action.json": ".github/actions/**/action.yml"
+  }
+}

@@ -28,6 +28,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 concurrency:
   group: bump-infra-ado-${{ github.event.inputs.version || github.event.client_payload.version || github.run_id }}
@@ -48,7 +49,6 @@ jobs:
           PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
           PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
           PAYLOAD_REVIEWERS: ${{ github.event.client_payload.reviewers }}
-          VAR_REVIEWERS: ${{ vars.INFRA_ADO_BUMP_REVIEWERS }}
         run: |
           set -euo pipefail
           COLLECTION_REPO="Automation-Development-Office/ado"
@@ -75,7 +75,7 @@ jobs:
           fi
 
           if [ -z "${REVIEWERS}" ]; then
-            REVIEWERS="${VAR_REVIEWERS}"
+            REVIEWERS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/variables/INFRA_ADO_BUMP_REVIEWERS" --jq .value 2>/dev/null || true)"
           fi
 
           {
