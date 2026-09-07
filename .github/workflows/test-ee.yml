@@ -173,8 +173,10 @@ jobs:
 
           docker create --name "${CONTAINER}" "${IMAGE}" \
             ansible-runner run /runner -p ping.yml
-          docker cp tests/smoke/project "${CONTAINER}:/runner/project"
-          docker cp tests/smoke/inventory "${CONTAINER}:/runner/inventory"
+          # Copy contents into /runner/project and /runner/inventory (not nested
+          # project/project/...) — docker cp a directory onto an existing path nests
+          # the source dir name on Docker, unlike Podman.
+          tar -C tests/smoke -cf - project inventory | docker cp - "${CONTAINER}:/runner/"
           docker start -a "${CONTAINER}" | tee /tmp/ee-report/ansible-runner-smoke.txt
           echo "ansible-runner smoke test (localhost ping) succeeded"
 
