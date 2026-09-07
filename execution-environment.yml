@@ -78,5 +78,9 @@ additional_build_steps:
 
 options:
   package_manager_path: /usr/bin/microdnf
+  # Match ee-supported: AAP launches EEs as root; ansible-builder entrypoint sets up the job runtime.
+  user: root
+  workdir: /runner
+  relax_passwd_permissions: true
   tags:
     - ado-ee:latest
