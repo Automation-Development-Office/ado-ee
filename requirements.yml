@@ -27,9 +27,9 @@ collections:
   - name: community.general
     version: 13.1.0
 
-  # Red Hat validated
+  # Red Hat validated (infra.aap_configuration >=4.6.0 required by infra.ado 1.4.0)
   - name: infra.aap_configuration
-    version: 3.4.1
+    version: 4.6.0
   - name: infra.controller_configuration
     version: 3.1.2
 

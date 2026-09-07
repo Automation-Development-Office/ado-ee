@@ -122,7 +122,7 @@ jobs:
             "ansible.hub=1.0.6"
             "awx.awx=24.6.1"
             "community.general=13.1.0"
-            "infra.aap_configuration=3.4.1"
+            "infra.aap_configuration=4.6.0"
             "infra.controller_configuration=3.1.2"
           )
           for entry in "${expected_collections[@]}"; do
