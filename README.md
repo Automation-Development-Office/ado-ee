@@ -128,7 +128,7 @@ For user-visible EE changes, also add a Changeset (`npx changeset`) so the next 
 - Every push to `main`
 - Manual **workflow_dispatch**
 
-It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
+It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), asserts the image runs as `root` for AAP compatibility, runs a localhost `ping` smoke test via `ansible-runner`, and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
 
 #### Required for merge
 

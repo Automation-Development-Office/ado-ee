@@ -108,6 +108,13 @@ jobs:
           CREATED=$(docker image inspect "$IMAGE" --format '{{.Created}}')
           DIGEST=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || true)
           IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+          IMAGE_USER=$(docker image inspect "$IMAGE" --format '{{.Config.User}}')
+
+          if [ "${IMAGE_USER}" != "root" ]; then
+            echo "::error::Image User must be root for AAP compatibility (got: ${IMAGE_USER})"
+            exit 1
+          fi
+          echo "image_user=${IMAGE_USER}" >> /tmp/ee-report/image-user.txt
 
           # Runtime probes
           docker run --rm "$IMAGE" ansible --version > /tmp/ee-report/ansible-version.txt
@@ -153,6 +160,24 @@ jobs:
 
           echo "EE test build succeeded (${SIZE_HUMAN})"
 
+      - name: Smoke test EE with ansible-runner
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.LOCAL_IMAGE }}"
+          CONTAINER="ee-smoke-${GITHUB_RUN_ID}"
+
+          cleanup() {
+            docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker create --name "${CONTAINER}" "${IMAGE}" \
+            ansible-runner run /runner -p ping.yml
+          docker cp tests/smoke/project "${CONTAINER}:/runner/project"
+          docker cp tests/smoke/inventory "${CONTAINER}:/runner/inventory"
+          docker start -a "${CONTAINER}" | tee /tmp/ee-report/ansible-runner-smoke.txt
+          echo "ansible-runner smoke test (localhost ping) succeeded"
+
       - name: Write job summary
         run: |
           {
@@ -168,6 +193,13 @@ jobs:
             echo "| Image size | ${{ steps.info.outputs.size_human }} |"
             echo "| Created | ${{ steps.info.outputs.created }} |"
             echo "| Build digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| Image user | \`root\` (required for AAP) |"
+            echo ""
+            echo "### ansible-runner smoke test"
+            echo ""
+            echo '```'
+            cat /tmp/ee-report/ansible-runner-smoke.txt
+            echo '```'
             echo ""
             echo "### ansible --version"
             echo ""
