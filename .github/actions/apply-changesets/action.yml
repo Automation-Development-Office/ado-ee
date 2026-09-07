@@ -1,6 +1,6 @@
 ---
 name: Apply changesets for release
-description: Run changeset version and prepare changelog/package updates for the release tag
+description: Run changeset version, align package.json and CHANGELOG to the release tag, and prepare release artifacts
 
 inputs:
   tag:
@@ -57,18 +57,42 @@ runs:
 
         npm run version-packages
 
-        ACTUAL="$(node -p "require('./package.json').version")"
-        echo "version=$ACTUAL" >> "$GITHUB_OUTPUT"
+        CHANGESETS_VERSION="$(node -p "require('./package.json').version")"
+        VERSION="${EXPECTED}"
 
-        if [ "$ACTUAL" != "$EXPECTED" ]; then
-          echo "::error::Release tag version (${EXPECTED}) does not match Changesets bump (${ACTUAL})."
-          echo "Retag to v${ACTUAL}, or adjust changeset bump types so they resolve to ${EXPECTED}."
-          exit 1
+        if [ "${CHANGESETS_VERSION}" != "${VERSION}" ]; then
+          echo "::notice title=Release tag version::Using release tag ${VERSION} (Changesets computed ${CHANGESETS_VERSION})."
+          python3 - <<PY
+        import json
+        from pathlib import Path
+
+        expected = "${VERSION}"
+        actual = "${CHANGESETS_VERSION}"
+
+        pkg_path = Path("package.json")
+        pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
+        pkg["version"] = expected
+        pkg_path.write_text(json.dumps(pkg, indent=2) + "\n", encoding="utf-8")
+
+        changelog = Path("CHANGELOG.md")
+        if changelog.is_file():
+            text = changelog.read_text(encoding="utf-8")
+            for old, new in (
+                (f"## {actual}", f"## {expected}"),
+                (f"## [{actual}]", f"## [{expected}]"),
+            ):
+                if old in text:
+                    text = text.replace(old, new, 1)
+                    break
+            changelog.write_text(text, encoding="utf-8")
+        PY
         fi
+
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
         python3 - <<PY
         from pathlib import Path
-        version = "${ACTUAL}"
+        version = "${VERSION}"
         changelog = Path("${CHANGELOG_FILE}")
         notes_path = Path("${NOTES_FILE}")
         if not changelog.is_file():
