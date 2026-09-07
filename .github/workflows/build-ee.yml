@@ -120,10 +120,10 @@ jobs:
           fi
 
           {
-            echo "IMAGE_TAGS<<EOF"
+            echo "tags<<EOF"
             echo "${tags}"
             echo "EOF"
-          } >> "$GITHUB_ENV"
+          } >> "$GITHUB_OUTPUT"
 
           echo "GitHub pre-release: ${IS_PRERELEASE}"
           echo "Release tag: ${RELEASE_TAG}"
@@ -191,7 +191,7 @@ jobs:
           context: ./context
           file: ./context/Dockerfile
           push: true
-          tags: ${{ env.IMAGE_TAGS }}
+          tags: ${{ steps.image_tags.outputs.tags }}
           secret-files: |
             automation_hub_token=${{ runner.temp }}/automation_hub_token
           cache-from: type=gha

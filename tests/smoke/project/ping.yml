@@ -1,0 +1,7 @@
+---
+- name: EE smoke test
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ping localhost
+      ansible.builtin.ping:

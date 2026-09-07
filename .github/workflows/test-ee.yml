@@ -108,6 +108,13 @@ jobs:
           CREATED=$(docker image inspect "$IMAGE" --format '{{.Created}}')
           DIGEST=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || true)
           IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+          IMAGE_USER=$(docker image inspect "$IMAGE" --format '{{.Config.User}}')
+
+          if [ "${IMAGE_USER}" != "root" ]; then
+            echo "::error::Image User must be root for AAP compatibility (got: ${IMAGE_USER})"
+            exit 1
+          fi
+          echo "image_user=${IMAGE_USER}" >> /tmp/ee-report/image-user.txt
 
           # Runtime probes
           docker run --rm "$IMAGE" ansible --version > /tmp/ee-report/ansible-version.txt
@@ -117,12 +124,12 @@ jobs:
           # Verify required collections and versions
           fail=0
           expected_collections=(
-            "infra.ado=1.2.0"
+            "infra.ado=1.4.0"
             "ansible.controller=4.6.19"
             "ansible.hub=1.0.6"
             "awx.awx=24.6.1"
             "community.general=13.1.0"
-            "infra.aap_configuration=3.4.1"
+            "infra.aap_configuration=4.6.0"
             "infra.controller_configuration=3.1.2"
           )
           for entry in "${expected_collections[@]}"; do
@@ -153,6 +160,26 @@ jobs:
 
           echo "EE test build succeeded (${SIZE_HUMAN})"
 
+      - name: Smoke test EE with ansible-runner
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.LOCAL_IMAGE }}"
+          CONTAINER="ee-smoke-${GITHUB_RUN_ID}"
+
+          cleanup() {
+            docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker create --name "${CONTAINER}" "${IMAGE}" \
+            ansible-runner run /runner -p ping.yml
+          # Copy contents into /runner/project and /runner/inventory (not nested
+          # project/project/...) — docker cp a directory onto an existing path nests
+          # the source dir name on Docker, unlike Podman.
+          tar -C tests/smoke -cf - project inventory | docker cp - "${CONTAINER}:/runner/"
+          docker start -a "${CONTAINER}" | tee /tmp/ee-report/ansible-runner-smoke.txt
+          echo "ansible-runner smoke test (localhost ping) succeeded"
+
       - name: Write job summary
         run: |
           {
@@ -168,6 +195,13 @@ jobs:
             echo "| Image size | ${{ steps.info.outputs.size_human }} |"
             echo "| Created | ${{ steps.info.outputs.created }} |"
             echo "| Build digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| Image user | \`root\` (required for AAP) |"
+            echo ""
+            echo "### ansible-runner smoke test"
+            echo ""
+            echo '```'
+            cat /tmp/ee-report/ansible-runner-smoke.txt
+            echo '```'
             echo ""
             echo "### ansible --version"
             echo ""

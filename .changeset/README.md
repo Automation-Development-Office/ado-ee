@@ -14,7 +14,7 @@ Skip for typo-only or internal refactors with no user impact (or add an empty/`p
 npx changeset
 ```
 
-Or create `.changeset/<short-name>.md` manually:
+Or create `.changeset/<short-name>.md` manually (use a unique name per PR — e.g. `bump-infra-ado-1.4.0.md`, not a shared filename):
 
 ```md
 ---

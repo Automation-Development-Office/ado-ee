@@ -113,7 +113,7 @@ runs:
             raise SystemExit(f"test-ee.yml: expected 1 infra.ado pin replacement, got {wf_n}")
         workflow.write_text(wf_new, encoding="utf-8")
 
-        changeset = Path(".changeset/bump-infra-ado.md")
+        changeset = Path(f".changeset/bump-infra-ado-{version}.md")
         changeset.write_text(
             "\n".join(
                 [
@@ -129,7 +129,7 @@ runs:
         )
         PY
 
-        git add requirements.yml .github/workflows/test-ee.yml .changeset/bump-infra-ado.md
+        git add requirements.yml .github/workflows/test-ee.yml ".changeset/bump-infra-ado-${VERSION}.md"
         if git diff --cached --quiet; then
           echo "main already pins infra.ado ${VERSION}; nothing to do."
           echo "skipped=true" >> "$GITHUB_OUTPUT"

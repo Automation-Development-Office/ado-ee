@@ -84,7 +84,7 @@ podman run --rm ado-ee:local ansible-galaxy collection list
 podman run --rm ado-ee:local ansible --version
 ```
 
-You should see `infra.ado` 1.2.0 and the pinned Hub/Galaxy collections (for example `ansible.controller` 4.6.19, `infra.aap_configuration` 3.4.1) in the collection list.
+You should see `infra.ado` 1.4.0 and the pinned Hub/Galaxy collections (for example `ansible.controller` 4.6.19, `infra.aap_configuration` 4.6.0) in the collection list.
 
 ### Useful local checks
 
@@ -128,7 +128,7 @@ For user-visible EE changes, also add a Changeset (`npx changeset`) so the next 
 - Every push to `main`
 - Manual **workflow_dispatch**
 
-It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
+It builds the EE in GitHub Actions, verifies required collections/versions (including `infra.ado` and Hub/Galaxy pins), asserts the image runs as `root` for AAP compatibility, runs a localhost `ping` smoke test via `ansible-runner`, and writes a job summary with image size, Ansible versions, and the full collection list. The image is **not** pushed to GHCR. A report artifact (`ee-test-report`) is uploaded for download.
 
 #### Required for merge
 

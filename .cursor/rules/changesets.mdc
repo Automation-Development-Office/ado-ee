@@ -1,0 +1,37 @@
+---
+description: Require a Changesets fragment for every user- or operator-visible change
+alwaysApply: true
+---
+
+# Changesets
+
+When you change this repo, **add or update a Changesets fragment** under `.changeset/` as part of the same work — do not leave it for a follow-up.
+
+## When to add a fragment
+
+Add one fragment **per logical change** (one PR may include several), including:
+
+- EE definition (`execution-environment.yml`), collections, dependencies, or base image
+- CI/release workflows (`.github/workflows/`, `.github/actions/`)
+- Operator-facing docs or release behavior
+
+Skip only pure typo fixes or edits with zero operator/user impact (e.g. local IDE settings).
+
+## How to add it
+
+Create a **unique** file name, e.g. `.changeset/fix-smoke-test-docker-cp.md` (never reuse a name from another version or PR):
+
+```md
+---
+"ado-ee": patch
+---
+
+Short description of what changed and why it matters to operators.
+```
+
+Use `patch`, `minor`, or `major` per [docs/RELEASING.md](../docs/RELEASING.md).
+
+## Before finishing
+
+- [ ] Every commit-worthy change in the session has a matching `.changeset/*.md` fragment (except skipped cases above).
+- [ ] Fragment filenames are unique and describe the change.

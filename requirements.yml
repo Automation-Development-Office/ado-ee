@@ -10,7 +10,7 @@ collections:
   # Automation Development Office collection (release artifact)
   - name: infra.ado
     type: url
-    source: https://github.com/Automation-Development-Office/ado/releases/download/1.2.0/infra-ado-1.2.0.tar.gz
+    source: https://github.com/Automation-Development-Office/ado/releases/download/1.4.0/infra-ado-1.4.0.tar.gz
 
   # Declared dependency of infra.ado
   - name: ansible.utils
@@ -27,9 +27,9 @@ collections:
   - name: community.general
     version: 13.1.0
 
-  # Red Hat validated
+  # Red Hat validated (infra.aap_configuration >=4.6.0 required by infra.ado 1.4.0)
   - name: infra.aap_configuration
-    version: 3.4.1
+    version: 4.6.0
   - name: infra.controller_configuration
     version: 3.1.2
 
