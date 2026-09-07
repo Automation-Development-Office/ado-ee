@@ -1,5 +1,17 @@
 # ADO EE Changelog
 
+## 1.2.0
+
+### Patch Changes
+
+- 82fd193: Add an **Update Collection Release** workflow that opens a PR to pin infra.ado when a collection version is selected (manual run now, collection-release ping later).
+- 9af258e: Bump infra.ado collection to 1.4.0 and infra.aap_configuration to 4.6.0 (required dependency).
+- 5dedc72: Add CI smoke test that asserts image User=root and runs a localhost ping job via ansible-runner through the EE entrypoint.
+- ffe7af3: Run the EE container as root (matching ee-supported) so AAP can launch jobs without passwd lookup failures.
+- cd384d7: Fix release and infra.ado bump workflows: pass image tags via step outputs instead of `GITHUB_ENV`, and load bump reviewers from the repo variable via the GitHub API.
+- cd384d7: Fix CI smoke test file copy: stream project/inventory into the container via tar so Docker does not nest paths under `/runner/project/project/`.
+- b601390: Use the GitHub Release tag as the authoritative EE version when applying Changesets (override computed bump when they differ).
+
 ## 1.1.0
 
 ### Minor Changes
