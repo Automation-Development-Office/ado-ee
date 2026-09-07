@@ -11,7 +11,7 @@ The automation lives in [`.github/workflows/build-ee.yml`](../.github/workflows/
 1. Work is merged to `main` (or the commit you will tag).
 2. User-visible PRs include Changesets under [`.changeset/`](../.changeset/) (see [Adding a changeset](#adding-a-changeset-during-development)).
 3. You know whether this is a **full release** or a **pre-release**.
-4. You know the **exact tag name** you will use. Prefer **unprefixed** semver (`1.2.0`, `1.0.0-alpha`) to match existing GHCR tags. For a full release, that tag must match what Changesets will bump `package.json` to (see [Version alignment](#version-alignment)).
+4. You know the **exact tag name** you will use. Prefer **unprefixed** semver (`1.2.0`, `1.0.0-alpha`) to match existing GHCR tags. For a full release, that tag becomes `package.json` and the new `CHANGELOG.md` section (see [Version alignment](#version-alignment)).
 5. Repository secrets are set: `RH_REGISTRY_USERNAME`, `RH_REGISTRY_TOKEN`, `AUTOMATION_HUB_TOKEN`.
 
 Current package version is in [`package.json`](../package.json). Pending Changesets determine the next bump (`patch` / `minor` / `major`).
@@ -94,24 +94,18 @@ Image name: `ghcr.io/automation-development-office/ado-ee`.
 
 ## Version alignment
 
-For a **full** release, the GitHub Release tag (without a leading `v`) must equal the version Changesets will write into `package.json`.
+For a **full** release, the **GitHub Release tag** (without a leading `v`) is authoritative. The release workflow runs `changeset version`, then sets `package.json` and the new `CHANGELOG.md` heading to that tag.
 
 Example:
 
-- `package.json` is `1.0.1`
-- Pending Changesets include a `minor` bump
-- Next version is `1.1.0`
-- Publish the release with tag `1.1.0` (or `v1.1.0`)
+- `package.json` is `1.1.0`
+- Pending Changesets would normally bump to `1.1.1` (all `patch`)
+- You publish release tag `1.2.0`
+- The workflow applies changesets, then rewrites the version to **1.2.0** in `package.json` and `CHANGELOG.md`
 
-If they do not match, the **Apply changesets** step fails with an error telling you to retag or adjust bump types.
+Use any semver tag you intend to ship; you do not need to match Changesets bump math. Optional: run `npx changeset status` locally to preview what Changesets would compute before tagging.
 
-Pre-releases do not bump `package.json`, so this check does not apply.
-
-To see what is pending locally (after `npm install`):
-
-```bash
-npx changeset status
-```
+Pre-releases do not bump `package.json`, so this does not apply to them.
 
 ---
 
@@ -142,14 +136,14 @@ Pending `.changeset/` files stay in the repo for the eventual full release.
 
 ## Step-by-step: create a full (stable) release
 
-1. Confirm pending Changesets on `main` and compute the next version (see [Version alignment](#version-alignment)).
+1. Confirm pending Changesets on `main` for the release notes you want compiled.
 2. **Releases** → **Draft a new release**.
-3. Create/select tag `X.Y.Z` that matches that next version (prefer unprefixed).
+3. Create/select the tag you want to ship (`X.Y.Z`, prefer unprefixed).
 4. Target the correct commit (usually latest `main`).
 5. **Do not** check “Set as a pre-release”.
 6. Publish the release.
 7. Watch **Actions** → **Build and Publish Execution Environment**:
-   - Apply changesets succeeds (versions match).
+   - Apply changesets succeeds.
    - **Set image tags** lists both `X.Y.Z` and `latest`.
    - Image push and release asset upload succeed.
    - A notice includes the changelog PR URL (or says none was needed).
@@ -193,10 +187,6 @@ When a new `infra.ado` GitHub Release exists, you do not have to edit `requireme
 ---
 
 ## If something goes wrong
-
-### Apply changesets: tag does not match bump
-
-Retag to the version Changesets expects, or change bump types in `.changeset/*.md`, then publish again (or delete the bad release/tag and recreate).
 
 ### Changelog PR was not opened
 
