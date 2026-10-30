@@ -4,3 +4,4 @@
 #
 # Keep pip available as an RPM so assemble still works after python package upgrades.
 python3-pip [platform:rpm]
+postgresql [platform:rpm]

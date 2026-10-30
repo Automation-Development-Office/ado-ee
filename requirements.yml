@@ -8,9 +8,8 @@
 #   - galaxy        → Ansible Galaxy (community)
 collections:
   # Automation Development Office collection (release artifact)
-  - name: infra.ado
-    type: url
-    source: https://github.com/Automation-Development-Office/ado/releases/download/1.4.0/infra-ado-1.4.0.tar.gz
+  - name: infra.automation_development_office
+    version: 2.1.1
 
   # Declared dependency of infra.ado
   - name: ansible.utils
