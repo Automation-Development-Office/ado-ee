@@ -1,5 +1,11 @@
 # ADO EE Changelog
 
+## 2.1.1
+
+### Patch Changes
+
+- 4f7cf49: Add the PostgreSQL client (`psql`) to the execution environment.
+
 ## 1.2.0
 
 ### Patch Changes
