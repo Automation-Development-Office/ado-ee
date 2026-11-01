@@ -7,10 +7,11 @@
 #   - rh_validated  → Red Hat Automation Hub validated
 #   - galaxy        → Ansible Galaxy (community)
 collections:
-  # Automation Development Office collection (release artifact)
-  - name: infra.ado
+  # Automation Development Office collection (release artifact).
+  # Not published to the Hub/Galaxy servers this EE searches, so install the GitHub Release tarball.
+  - name: infra.automation_development_office
     type: url
-    source: https://github.com/Automation-Development-Office/ado/releases/download/1.4.0/infra-ado-1.4.0.tar.gz
+    source: https://github.com/Automation-Development-Office/ado/releases/download/2.1.1/infra-automation_development_office-2.1.1.tar.gz
 
   # Declared dependency of infra.ado
   - name: ansible.utils
@@ -27,7 +28,7 @@ collections:
   - name: community.general
     version: 13.1.0
 
-  # Red Hat validated (infra.aap_configuration >=4.6.0 required by infra.ado 1.4.0)
+  # Red Hat validated (infra.aap_configuration >=4.6.0 required by infra.automation_development_office 2.1.1)
   - name: infra.aap_configuration
     version: 4.6.0
   - name: infra.controller_configuration
